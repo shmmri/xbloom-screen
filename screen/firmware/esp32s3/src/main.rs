@@ -72,11 +72,29 @@ fn log_internal_heap(when: &str) {
     log::info!("heap {when}: internal {} KB free, largest block {} KB", free / 1024, largest / 1024);
 }
 
+/// Print every failed heap allocation (size, requested capabilities, caller), so an
+/// ESP_ERR_NO_MEM in the log says what ran out.
+fn log_failed_allocations() {
+    unsafe extern "C" fn on_fail(size: usize, caps: u32, function: *const core::ffi::c_char) {
+        // esp_rom_printf doesn't allocate, which matters inside an allocation failure.
+        // SAFETY: NUL-terminated format; `function` is a C string or null.
+        unsafe {
+            let function = if function.is_null() { c"?".as_ptr() } else { function };
+            sys::esp_rom_printf(c"alloc failed: %u bytes, caps 0x%x, in %s\n".as_ptr(), size as u32, caps, function);
+        }
+    }
+    // SAFETY: registers a plain function pointer once at start-up.
+    if let Err(e) = sys::esp!(unsafe { sys::heap_caps_register_failed_alloc_callback(Some(on_fail)) }) {
+        log::warn!("heap: can't register the failed-allocation hook: {e}");
+    }
+}
+
 fn main() {
     sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
     log::info!("xBloom Screen {} on {}", env!("CARGO_PKG_VERSION"), BOARD.name);
     psram_thread_stacks();
+    log_failed_allocations();
 
     let peripherals = Peripherals::take().expect("peripherals");
     let sysloop = EspSystemEventLoop::take().expect("event loop");
@@ -98,6 +116,13 @@ fn main() {
     let bus = Arc::new(Mutex::new(I2cDriver::new(peripherals.i2c0, sda, scl, &cfg).expect("i2c")));
     let lines = Arc::new(io::Lines::new(Arc::clone(&bus), BOARD.expander).expect("control lines"));
 
+    // Wi-Fi (or the setup hotspot) first: it needs internal RAM for its task and buffers, and
+    // on the ESP32-8048S043C it failed with ESP_ERR_NO_MEM when it started after the display
+    // (its bounce buffers) and the UI.
+    log_internal_heap("before wifi");
+    let net = net::Network::start(peripherals.modem, sysloop, nvs, &settings.wifi, data, 80).expect("wifi");
+    log_internal_heap("after wifi");
+
     // Display, backlight, touch, and Slint on top.
     let backlight = match BOARD.backlight {
         Light::Pwm(gpio) => {
@@ -118,12 +143,6 @@ fn main() {
     };
     platform::EspPlatform::install(panel, touch, settings.appearance.rotation).expect("slint platform");
 
-    // Wi-Fi (or the setup hotspot), then the app. Wi-Fi and Bluetooth need internal RAM for
-    // their task stacks and buffers, so they start before the UI tree is built: building it
-    // first used up internal RAM and Wi-Fi failed with ESP_ERR_NO_MEM (boot loop on the
-    // ESP32-8048S043C).
-    log_internal_heap("before wifi");
-    let net = net::Network::start(peripherals.modem, sysloop, nvs, &settings.wifi, data, 80).expect("wifi");
     // The data partition is ~8.9 MB with 16 MB flash and ~1.9 MB with 8 MB (partitions-8mb.csv):
     // keep screensaver videos to what fits.
     let small_flash = storage::usage().is_some_and(|(_, total)| total < 4 << 20);
