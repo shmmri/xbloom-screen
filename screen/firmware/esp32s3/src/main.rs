@@ -120,7 +120,15 @@ fn main() {
     // on the ESP32-8048S043C it failed with ESP_ERR_NO_MEM when it started after the display
     // (its bounce buffers) and the UI.
     log_internal_heap("before wifi");
-    let net = net::Network::start(peripherals.modem, sysloop, nvs, &settings.wifi, data, 80).expect("wifi");
+    // Wi-Fi is optional: if it can't start, the screen still comes up (the admin panel and the
+    // setup hotspot are then off), instead of aborting into a boot loop.
+    let net = match net::Network::start(peripherals.modem, sysloop, nvs, &settings.wifi, data, 80) {
+        Ok(net) => Some(net),
+        Err(e) => {
+            log::error!("wifi: off, the screen runs without the admin panel: {e}");
+            None
+        }
+    };
     log_internal_heap("after wifi");
 
     // Display, backlight, touch, and Slint on top.
@@ -164,7 +172,7 @@ fn main() {
         version: env!("CARGO_PKG_VERSION").into(),
         can_rotate: true,
     };
-    let hooks = hooks::EspHooks { net: Arc::clone(&net), backlight };
+    let hooks = hooks::EspHooks { net: net.clone(), backlight };
     let app = App::start(data, info, Box::new(ble::NimbleTransport::new()), Box::new(hooks), SimConfig::default());
     let weak = Arc::downgrade(&app);
     let rotation = settings.appearance.rotation;
@@ -178,12 +186,13 @@ fn main() {
             }
         }
     });
-    let _server = match http::start(Arc::clone(&app), Arc::clone(&net)) {
-        Ok(s) => Some(s),
-        Err(e) => {
+    let _server = match net.as_ref().map(|net| http::start(Arc::clone(&app), Arc::clone(net))) {
+        Some(Ok(s)) => Some(s),
+        Some(Err(e)) => {
             log::error!("http: {e}");
             None
         }
+        None => None,
     };
 
     log_internal_heap("before ui");

@@ -13,7 +13,7 @@ use crate::storage;
 /// Hooks for [`xbloom_app::App`].
 pub struct EspHooks {
     /// Wi-Fi.
-    pub net: Arc<Network>,
+    pub net: Option<Arc<Network>>,
     /// Display backlight.
     pub backlight: Arc<Mutex<Backlight>>,
 }
@@ -36,7 +36,9 @@ impl Platform for EspHooks {
     }
 
     fn wifi_changed(&self, wifi: &Wifi) {
-        self.net.set_credentials(wifi);
+        if let Some(net) = &self.net {
+            net.set_credentials(wifi);
+        }
     }
 
     fn storage(&self) -> Option<(u64, u64)> {
@@ -44,10 +46,10 @@ impl Platform for EspHooks {
     }
 
     fn admin_urls(&self) -> Vec<String> {
-        self.net.urls()
+        self.net.as_ref().map(|net| net.urls()).unwrap_or_default()
     }
 
     fn setup_hotspot(&self) -> Option<Hotspot> {
-        self.net.setup_hotspot()
+        self.net.as_ref().and_then(|net| net.setup_hotspot())
     }
 }
