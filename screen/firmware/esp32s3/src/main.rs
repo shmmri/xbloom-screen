@@ -60,6 +60,18 @@ fn apply_timezone(tz: &str) {
     xbloom_ui::clock::reload_zone();
 }
 
+/// Log free internal RAM (the scarce kind: task stacks, DMA, Wi-Fi, Bluetooth).
+fn log_internal_heap(when: &str) {
+    // SAFETY: read-only heap statistics.
+    let (free, largest) = unsafe {
+        (
+            sys::heap_caps_get_free_size(sys::MALLOC_CAP_INTERNAL),
+            sys::heap_caps_get_largest_free_block(sys::MALLOC_CAP_INTERNAL),
+        )
+    };
+    log::info!("heap {when}: internal {} KB free, largest block {} KB", free / 1024, largest / 1024);
+}
+
 fn main() {
     sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
@@ -105,9 +117,12 @@ fn main() {
         wh => wh,
     };
     platform::EspPlatform::install(panel, touch, settings.appearance.rotation).expect("slint platform");
-    let ui = xbloom_ui::AppWindow::new().expect("ui");
 
-    // Wi-Fi (or the setup hotspot), then the app.
+    // Wi-Fi (or the setup hotspot), then the app. Wi-Fi and Bluetooth need internal RAM for
+    // their task stacks and buffers, so they start before the UI tree is built: building it
+    // first used up internal RAM and Wi-Fi failed with ESP_ERR_NO_MEM (boot loop on the
+    // ESP32-8048S043C).
+    log_internal_heap("before wifi");
     let net = net::Network::start(peripherals.modem, sysloop, nvs, &settings.wifi, data, 80).expect("wifi");
     // The data partition is ~8.9 MB with 16 MB flash and ~1.9 MB with 8 MB (partitions-8mb.csv):
     // keep screensaver videos to what fits.
@@ -152,6 +167,9 @@ fn main() {
         }
     };
 
+    log_internal_heap("before ui");
+    let ui = xbloom_ui::AppWindow::new().expect("ui");
+    log_internal_heap("after ui");
     xbloom_ui::bind(&ui, Arc::clone(&app));
     if let Err(e) = ui.run() {
         log::error!("ui: {e}");
