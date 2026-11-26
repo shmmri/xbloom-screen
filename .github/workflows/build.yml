@@ -12,7 +12,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install platformio esptool
-      - run: pio run -e sunton
+      - name: Build
+        run: |
+          set -o pipefail
+          pio run -e sunton 2>&1 | tee build.log || {
+            echo "=========== REAL ERRORS ==========="
+            grep -n -E "error:|undefined reference|fatal error|No such file" build.log | head -25
+            exit 1
+          }
       - name: Merge one image to flash at 0x0
         run: |
           B=.pio/build/sunton
