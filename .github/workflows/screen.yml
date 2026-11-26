@@ -111,6 +111,10 @@ jobs:
       # constants ("Cannot select XtensaISD::PCREL_WRAPPER"), which Slint UIs are full of, and
       # 1.99.0.0's std no longer builds for ESP-IDF (fchmodat); 1.98.1.0 does both.
       - uses: esp-rs/xtensa-toolchain@v1.6
+        # espup asks the GitHub API for the release; without a token it shares the runner's
+        # anonymous rate limit and fails at random ("rate limit exceeded").
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           default: true
           buildtargets: esp32s3
