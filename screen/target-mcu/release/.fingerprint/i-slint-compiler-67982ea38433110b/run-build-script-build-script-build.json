@@ -1,0 +1,1 @@
+{"rustc":18169182855791486453,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[17361547666446583438,"build_script_build",false,9316479846332938634]],"local":[{"RerunIfChanged":{"output":"release/build/i-slint-compiler-67982ea38433110b/output","paths":["widgets"]}}],"rustflags":[],"config":0,"compile_kind":0}

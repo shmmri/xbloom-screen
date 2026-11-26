@@ -215,6 +215,7 @@ fn main() {
     let ui = xbloom_ui::AppWindow::new().expect("ui");
     log_internal_heap("after ui");
     xbloom_ui::bind(&ui, Arc::clone(&app));
+    log::info!("ui: bound, starting the event loop");
     if let Err(e) = ui.run() {
         log::error!("ui: {e}");
     }

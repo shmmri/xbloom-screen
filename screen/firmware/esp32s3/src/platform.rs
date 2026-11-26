@@ -117,6 +117,9 @@ impl Platform for EspPlatform {
             _ => RenderingRotation::NoRotation,
         };
         let mut finger: Option<LogicalPosition> = None;
+        let mut frames = 0u32;
+        let mut heartbeat = Instant::now();
+        log::info!("ui: event loop started, window {:?}", self.window.size());
         loop {
             slint::platform::update_timers_and_animations();
             while let Ok(job) = rx.try_recv() {
@@ -150,9 +153,31 @@ impl Platform for EspPlatform {
 
             self.window.draw_if_needed(|renderer| {
                 renderer.set_rendering_rotation(rotation);
-                renderer.render(display.back_buffer(), panel.0 as usize);
+                let t = Instant::now();
+                let region = renderer.render(display.back_buffer(), panel.0 as usize);
+                let rendered = t.elapsed();
+                // Diagnosis: what the first frames drew (a black screen after the colour test).
+                let sample = (frames < 5).then(|| {
+                    let buf = display.back_buffer();
+                    let at = |x: u32, y: u32| buf[(y * panel.0 + x) as usize].0;
+                    (at(panel.0 / 2, panel.1 / 2), at(10, 10), at(panel.0 / 2, panel.1 * 4 / 5))
+                });
                 display.present();
+                frames += 1;
+                if let Some((mid, corner, low)) = sample {
+                    log::info!(
+                        "ui: frame {frames} rendered in {} ms, presented after {} ms, dirty {:?}; \
+                         pixels centre {mid:#06x} corner {corner:#06x} lower {low:#06x}",
+                        rendered.as_millis(),
+                        t.elapsed().as_millis(),
+                        region.bounding_box_size(),
+                    );
+                }
             });
+            if heartbeat.elapsed() >= Duration::from_secs(10) {
+                heartbeat = Instant::now();
+                log::info!("ui: alive, {frames} frames so far, finger {:?}", finger);
+            }
 
             // Sleep until the next timer, animation frame, posted job or touch poll.
             let wait = if self.window.has_active_animations() {
