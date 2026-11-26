@@ -180,6 +180,7 @@ impl Backlight {
                 let max = pwm.get_max_duty();
                 let p = u32::from(percent.min(100));
                 let duty = if p == 0 { 0 } else { (max * p * p / 10_000).max(max / 100).max(1) };
+                log::info!("backlight: {percent}% -> duty {duty} of {max}");
                 if let Err(e) = pwm.set_duty(duty) {
                     log::warn!("backlight: {e}");
                 }

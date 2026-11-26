@@ -139,6 +139,12 @@ fn main() {
         Light::Switch(line) => display::Backlight::switch(Arc::clone(&lines), line),
     };
     let backlight = Arc::new(Mutex::new(backlight));
+    // Diagnosis: light the backlight at full power before the UI starts. The UI sets its own
+    // brightness later, in `bind`, so this only shows whether the light itself can turn on.
+    if let Ok(mut b) = backlight.lock() {
+        b.set(100);
+    }
+    log::info!("backlight: set to 100% before the UI");
     if let Some(rst) = BOARD.lcd_reset {
         lines.pulse_low(rst, 10, 100);
     }
