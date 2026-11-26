@@ -148,7 +148,17 @@ fn main() {
     if let Some(rst) = BOARD.lcd_reset {
         lines.pulse_low(rst, 10, 100);
     }
-    let panel = display::Display::new(&BOARD).expect("display");
+    let mut panel = display::Display::new(&BOARD).expect("display");
+    // Diagnosis: paint full red, green and blue straight into the panel before any UI code
+    // runs. If the colours show, the panel and its timing work, and the fault is further on.
+    for (name, px) in [("red", 0xF800u16), ("green", 0x07E0), ("blue", 0x001F)] {
+        for p in panel.back_buffer().iter_mut() {
+            *p = slint::platform::software_renderer::Rgb565Pixel(px);
+        }
+        panel.present();
+        log::info!("colour test: {name} shown");
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+    }
     let touch = touch::Gt911::new(bus, &lines, &BOARD.touch, panel.size()).expect("touch");
     // The screen as the UI sees it: a quarter turn swaps the sides.
     let size = match panel.size() {
