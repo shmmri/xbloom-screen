@@ -34,6 +34,9 @@ globals:
   - id: taps
     type: int
     initial_value: "0"
+  - id: dirty
+    type: bool
+    initial_value: "false"
   - id: tx
     type: int
     initial_value: "-1"
@@ -102,15 +105,26 @@ display:
       }
       Color bg = Color(0x22, 0x42, 0x22);
       Color cream = Color(0xF4, 0xEF, 0xD6);
-      it.fill(bg);
-      it.print(40, 30, id(font_big), cream, "side");
-      it.print(40, 150, id(font_small), cream, "Screen test OK. Touch the screen.");
-      it.filled_rectangle(40, 220, 300, 90, Color(0x4A, 0x70, 0x3A));
-      it.print(190, 265, id(font_small), cream, TextAlign::CENTER, "Button A");
-      it.filled_rectangle(400, 220, 300, 90, Color(0x8A, 0x44, 0x22));
-      it.print(550, 265, id(font_small), cream, TextAlign::CENTER, "Button B");
-      it.printf(40, 340, id(font_small), cream, "Touches: %d", id(taps));
-      if (id(tx) >= 0) it.filled_circle(id(tx), id(ty), 14, cream);
+      if (id(phase) == 4) {
+        // Draw the whole screen once. It is not cleared and redrawn again, so it does not blink.
+        it.fill(bg);
+        it.print(40, 30, id(font_big), cream, "side");
+        it.print(40, 150, id(font_small), cream, "Screen test OK. Touch the screen.");
+        it.filled_rectangle(40, 220, 300, 90, Color(0x4A, 0x70, 0x3A));
+        it.print(190, 265, id(font_small), cream, TextAlign::CENTER, "Button A");
+        it.filled_rectangle(400, 220, 300, 90, Color(0x8A, 0x44, 0x22));
+        it.print(550, 265, id(font_small), cream, TextAlign::CENTER, "Button B");
+        it.printf(40, 340, id(font_small), cream, "Touches: %d", id(taps));
+        id(phase) = 5;
+        return;
+      }
+      if (id(dirty)) {
+        // Only the counter changes; the rest of the screen stays as it was.
+        it.filled_rectangle(40, 335, 400, 45, bg);
+        it.printf(40, 340, id(font_small), cream, "Touches: %d", id(taps));
+        if (id(tx) >= 0) it.filled_circle(id(tx), id(ty), 10, cream);
+        id(dirty) = false;
+      }
 
 touchscreen:
   platform: gt911
@@ -121,4 +135,5 @@ touchscreen:
           id(taps) += 1;
           id(tx) = touch.x;
           id(ty) = touch.y;
+          id(dirty) = true;
       - component.update: my_display
