@@ -151,14 +151,15 @@ pub enum Backlight {
 }
 
 impl Backlight {
-    /// PWM on `gpio`, starting dark (the UI turns it on once it is up).
+    /// PWM on `gpio`, starting dark (the UI turns it on once it is up). 1 kHz: the Sunton
+    /// backlight driver stays dark at 20 kHz and only lights at a constant high.
     pub fn pwm(
         timer: impl LedcTimer<SpeedMode = LowSpeed> + 'static,
         channel: impl LedcChannel<SpeedMode = LowSpeed> + 'static,
         gpio: u8,
     ) -> Result<Self, EspError> {
         let timer =
-            LedcTimerDriver::new(timer, &TimerConfig::new().frequency(Hertz(20_000)).resolution(Resolution::Bits10))?;
+            LedcTimerDriver::new(timer, &TimerConfig::new().frequency(Hertz(1_000)).resolution(Resolution::Bits10))?;
         // SAFETY: the board reserves this GPIO for the backlight; nothing else claims it.
         let pin = unsafe { AnyOutputPin::steal(gpio) };
         let mut pwm = LedcDriver::new(channel, timer, pin)?;
